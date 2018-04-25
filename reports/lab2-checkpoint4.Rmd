@@ -1,0 +1,53 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+## Introdução
+
+A (Wikimedia Foundation)[https://wikimediafoundation.org/wiki/Home] é uma organização sem fins lucrativos que encoraja o crescimento, desenvolvimento e distribuição de conteúdo de educação grátis e em múltiplas linguagens através de projetos baseados em (wiki)[https://en.wikipedia.org/wiki/Wiki]. 
+
+Em 2016 o (Wikimedia Discovery)[https://www.mediawiki.org/wiki/Wikimedia_Discovery], um departamento da Wikimidia Foundation, abriu uma seleção de empregos para o cargo de analista de dados. 
+
+Neste relatório responderemos as seguintes perguntas feitas para (esta proposta de emprego)[https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016]:
+
+1. Qual é nossa taxa de click geral diária? Como ela varia entre os grupos?
+2. Qual resultados as pessoas tendem a tentar primeiro? Como ela muda dia a dia?
+3. Qual é nossa taxa de resultados zerados diária? Como ela varia entre os grupos?
+4. Seja duração da sessão aproximadamente o tempo entre o primeiro evento e o último evento em uma sessão. Escolha uma variável dos dados e descreva seu relacionamento com a duração da sessão. Visualiza o relacionamento.
+5. Sumarize seus achados em um sumário executivo.
+
+Para responder essas perguntas, utilizaremos os  (dados)[https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016/raw/master/events_log.csv.gz] fornecidos por eles e modificados pelo professor Nazareno Andrade utilizando um (script R)[https://github.com/fpcc2/lab2-cp4-orionwinter/blob/master/code/import-events_to_searches.R].
+
+## Descrevendo os dados
+
+```{r}
+library(tidyverse)
+library(here)
+```
+
+Primeiramente vamos importar os dados:
+
+```{r}
+buscas <- read_csv(here::here("data/search_data.csv"))
+```
+
+Vejamos a estrutura dos dados:
+
+```{r}
+buscas %>% 
+    str(max.level = 1)
+```
+
+Existem 8 colunas nos dados sendo elas:
+
+session_id             : Um id único identificando sessões individuais
+search_index           : Um contador de buscas em uma mesma sessão ordenado cronologicamente
+session_start_timestamp: O timestamp que a sessão iniciou
+session_start_date     : A data e hora que a sessão iniciou
+group                  : O grupo que pode ser "a" ou "b"
+results                : A quantidade de resultados que a busca retornou
+num_clicks             : O número de páginas que o usuário visitou a partir da busca
+first_click            : A posição do link da página visitada no mecanismo de busca de páginas
+
+
