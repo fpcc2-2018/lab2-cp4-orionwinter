@@ -1,3 +1,9 @@
+# Link para relatório
+
+É possível baixar o relatório com o comando abaixo:
+
+`wget https://github.com/fpcc2/lab2-cp4-orionwinter/blob/master/reports/lab2-checkpoint4.html`
+
 # Sessões, buscas e navegação na wikimedia
 
 Este repo é a semente para uma análise de padrões de busca e navegação em páginas de projetos da wikimedia (provavelmente wikipedia).
