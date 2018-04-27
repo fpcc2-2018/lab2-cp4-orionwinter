@@ -1,53 +1,442 @@
 ---
-title: "R Notebook"
-output: html_notebook
+title: "Análise de dados da Wikimedia Foundation"
+output:
+  html_document:
+    df_print: paged
 ---
 
 ## Introdução
 
-A (Wikimedia Foundation)[https://wikimediafoundation.org/wiki/Home] é uma organização sem fins lucrativos que encoraja o crescimento, desenvolvimento e distribuição de conteúdo de educação grátis e em múltiplas linguagens através de projetos baseados em (wiki)[https://en.wikipedia.org/wiki/Wiki]. 
+A [Wikimedia Foundation](https://wikimediafoundation.org/wiki/Home) é uma organização sem fins lucrativos que encoraja o crescimento, desenvolvimento e distribuição de conteúdo de educação grátis e em múltiplas linguagens através de projetos baseados em [wiki](https://en.wikipedia.org/wiki/Wiki). 
 
-Em 2016 o (Wikimedia Discovery)[https://www.mediawiki.org/wiki/Wikimedia_Discovery], um departamento da Wikimidia Foundation, abriu uma seleção de empregos para o cargo de analista de dados. 
-
-Neste relatório responderemos as seguintes perguntas feitas para (esta proposta de emprego)[https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016]:
+Em 2016 o [Wikimedia Discovery](https://www.mediawiki.org/wiki/Wikimedia_Discovery), um departamento da Wikimidia Foundation, abriu uma seleção de empregos para o cargo de analista de dados. Neste relatório responderemos as perguntas propostas por eles, descrita [nesta proposta de emprego](https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016):
 
 1. Qual é nossa taxa de click geral diária? Como ela varia entre os grupos?
 2. Qual resultados as pessoas tendem a tentar primeiro? Como ela muda dia a dia?
 3. Qual é nossa taxa de resultados zerados diária? Como ela varia entre os grupos?
 4. Seja duração da sessão aproximadamente o tempo entre o primeiro evento e o último evento em uma sessão. Escolha uma variável dos dados e descreva seu relacionamento com a duração da sessão. Visualiza o relacionamento.
-5. Sumarize seus achados em um sumário executivo.
 
-Para responder essas perguntas, utilizaremos os  (dados)[https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016/raw/master/events_log.csv.gz] fornecidos por eles e modificados pelo professor Nazareno Andrade utilizando um (script R)[https://github.com/fpcc2/lab2-cp4-orionwinter/blob/master/code/import-events_to_searches.R].
+Para responder essas perguntas, utilizaremos os  [dados](https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016/raw/master/events_log.csv.gz) fornecidos por eles e modificados pelo professor Nazareno Andrade utilizando um [script R](https://github.com/fpcc2/lab2-cp4-orionwinter/blob/master/code/import-events_to_searches.R).
 
 ## Descrevendo os dados
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 library(tidyverse)
+library(lubridate)
 library(here)
+library(scales)
 ```
 
 Primeiramente vamos importar os dados:
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 buscas <- read_csv(here::here("data/search_data.csv"))
 ```
 
 Vejamos a estrutura dos dados:
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 buscas %>% 
     str(max.level = 1)
 ```
 
-Existem 8 colunas nos dados sendo elas:
+Existem 9 colunas nos dados sendo elas:
 
-session_id             : Um id único identificando sessões individuais
-search_index           : Um contador de buscas em uma mesma sessão ordenado cronologicamente
-session_start_timestamp: O timestamp que a sessão iniciou
-session_start_date     : A data e hora que a sessão iniciou
-group                  : O grupo que pode ser "a" ou "b"
-results                : A quantidade de resultados que a busca retornou
-num_clicks             : O número de páginas que o usuário visitou a partir da busca
-first_click            : A posição do link da página visitada no mecanismo de busca de páginas
+* session_id             : Um id único identificando sessões individuais
+* search_index           : Um contador de buscas em uma mesma sessão ordenado cronologicamente
+* session_start_timestamp: O timestamp que a sessão iniciou
+* session_start_date     : A data e hora que a sessão iniciou
+* group                  : O grupo que pode ser "a" ou "b"
+* results                : A quantidade de resultados que a busca retornou
+* num_clicks             : O número de páginas que o usuário visitou a partir da busca
+* first_click            : A posição do link da página visitada no mecanismo de busca de páginas
+* session_length         : A duração em segundos da sessão
+
+## Análise de dados exploratória
+
+Agora vamos explorar os dados, olhando suas distribuições, valores extremos e faltantes:
+
+### session_id
+
+Vejamos primeiro os sessions ids:
+
+```{r warning=FALSE, message=FALSE}
+buscas.por.sessao <- buscas %>% 
+    group_by(session_id) %>% 
+    summarise(contagem = n(),
+              tempo.mediano.entre.consultas = median(session_start_date - lag(session_start_date),
+                                                     na.rm = TRUE),
+              desvio.padrao.entre.consultas = sd(session_start_date - lag(session_start_date),
+                                                     na.rm = TRUE)) %>% 
+    arrange(-contagem)
+
+buscas.por.sessao %>% 
+    ggplot(aes(x = contagem)) +
+        geom_histogram(binwidth = 5) +
+        labs(x = "quantidade de buscas por sessão", y = "contagem")
+```
+
+De um total de quase 68 mil sessões, a maior parte teve até 10 buscas, que estão concentradas nas duas primeiras barras. A distribuição da quantidade de buscas por sessão é bastante assimétrica e enviesada à direita. 
+
+Vejamos agora o tempo mediano entre consultas:
+
+```{r warning=FALSE, message=FALSE}
+buscas.por.sessao %>% 
+    filter(!is.na(tempo.mediano.entre.consultas)) %>% 
+    mutate(tempo.mediano.entre.consultas = as.integer(tempo.mediano.entre.consultas)) %>% 
+    ggplot(aes(x = tempo.mediano.entre.consultas)) +
+        geom_histogram(binwidth = 5) +
+        labs(x = "tempo mediano entre consultas (s)", y = "contagem")
+
+buscas.por.sessao %>% 
+    mutate(tempo.mediano.entre.consultas = as.integer(tempo.mediano.entre.consultas)) %>% 
+    pull(tempo.mediano.entre.consultas) %>% 
+    summary()
+```
+
+Vemos que muitas sessões tem o tempo mediano entre consultas bastante baixo, onde 50% das sessões tem mediana de duração  abaixo de 12 segundos e 75% das sessões tem mediana de duração abaixo de 27 segundos.
+
+### session_start_date
+
+Vamos explorar agora a data das buscas:
+
+```{r warning=FALSE, message=FALSE}
+buscas %>% 
+    summarise(data.inicio = min(session_start_date),
+              data.fim = max(session_start_date))
+
+buscas %>% 
+    mutate(dia.do.ano = paste(day(session_start_date), "/", month(session_start_date), "-", weekdays(session_start_date), sep = "")) %>% 
+    group_by(dia.do.ano) %>% 
+    count() %>% 
+    ggplot(aes(x = dia.do.ano, n)) +
+        geom_bar(stat = "identity") +
+        labs(x = "dia do ano", y = "contagem")
+```
+
+Vemos que os dados vão do dia 01/03/2016 à 08/03/2016, onde os finais de semana tem menos observações que os demais. Como o dia 08/03 foi até as 20h, tem menos observações que os outros dias de semana.
+
+### group
+
+Vejamos agora os grupos que estão presentes nos dados.
+
+```{r warning=FALSE, message=FALSE}
+buscas %>% 
+    group_by(group) %>% 
+    summarise(total = n(),
+              proporcao = total / nrow(buscas))
+```
+
+Vemos que cerca de 70% das buscas são do grupo A, enquanto cerca de 30% são do grupo B.
+
+### results
+
+Vejamos agora quantos resultados as buscas retornam:
+
+```{r warning=FALSE, message=FALSE}
+buscas %>% 
+    ggplot(aes(x = results)) +
+        geom_histogram(binwidth = 5) +
+        labs(x = "resultados da busca", y = "contagem")
+
+buscas %>% 
+    pull(results) %>% 
+    summary()
+```
+
+Vemos que 75% das buscas retornam até 20 resultados, porém existem alguns que retornam bem mais que este valor. 
+Vejamos quais são estes:
+
+```{r warning=FALSE, message=FALSE}
+buscas %>% 
+    filter(results > 20) %>% 
+    arrange(-results) %>% 
+    select(session_id, results)
+```
+
+Vemos que existe uma quantidade considerável de buscas que retornaram mais que 20 resultados, tendo vários que retornaram até 500. Como a [api](https://www.mediawiki.org/wiki/API:Lists) informa que o limite de resultados é 10 por default, mas pode ser aumentado até 500, então não faremos nenhum processamento com os resultados.
+
+### num_clicks
+
+Vejamos agora a quantidade de clicks que um usuário faz:
+
+```{r warning=FALSE, message=FALSE}
+buscas %>% 
+    ggplot(aes(x = num_clicks)) +
+        geom_histogram(binwidth = 1) +
+        labs(x = "número de clicks", y = "contagem")
+
+buscas %>% 
+    pull(num_clicks) %>% 
+    summary()
+```
+
+Vemos que a concentração maior de clicks está próxima de zero, onde 75% das vezes não existe nenhum click, porém a distribuição tem uma cauda longa a direita, tendo um caso que o usuário clicou mais de 30 vezes nos itens da busca.
+
+Podemos ver abaixo que existem quantidades de clicks superior à quantidade de resultados, inclusive quando a quantidade de resultados é zero. Como um usuário pode clicar em uma página, depois em outra e em seguida voltar à primeira, removeremos apenas as observações que o número de clicks for superior a quantidade de resultados e o número de resultados for zero, visto que um usuário não pode clicar em um link se a busca não retornou nada.
+
+```{r warning=FALSE, message=FALSE}
+buscas %>% 
+    filter(num_clicks > results) %>% 
+    arrange(results) %>% 
+    select(session_id, num_clicks, results)
+
+buscas.filtradas <- buscas %>% 
+    filter(!(num_clicks > results & results == 0))
+```
 
 
+### first_click
+
+Vejamos agora a distribuição da posição do item que o usuário clicou no mecanismo de busca:
+
+```{r warning=FALSE, message=FALSE}
+buscas %>% 
+    filter(!is.na(first_click)) %>% 
+        ggplot(aes(x = first_click)) +
+            geom_histogram(bins = 50) +
+            labs(x = "índice do primeiro click", y = "contagem")
+```
+
+Vemos que a maior parte dos indices tem valor baixo, mas existem alguns com valor acima de 4000, o que é uma anomalia, pois vimos anteriormente que as buscas só retornam até cerca de 500 resultados.
+
+Visto isso, vamos remover as buscas que tiverem o índice do primeiro click acima do total de resultados.
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas <- buscas.filtradas %>% 
+    filter(is.na(first_click) | first_click <= results)
+```
+
+### session_length
+
+Por último, veremos quanto tempo demora as sessões, vendo sua distribuição:
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas %>% 
+    ggplot(aes(x = "sessão", y = session_length)) +
+        geom_jitter(alpha = 0.3) +
+        scale_y_continuous(labels = comma)
+```
+
+Vemos que grande parte das sessões tem duração baixa, visto a grande concentração de pontos abaixo. 
+
+Como a sessão não tem nenhuma restrição, não faremos nenhum filtro com a mesma.
+
+## Respondendo a primeira pergunta
+
+Relembrando, a primeira pergunta a ser respondida é a seguinte:
+**Qual é nossa taxa de click geral diária? Como ela varia entre os grupos?**
+
+Como alguns dados foram filtrados, vejamos novamente a distribuição da quantidade de clicks:
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas %>% 
+    ggplot(aes(x = "sessão", y = num_clicks)) +
+        geom_jitter(alpha = 0.05) +
+        labs(x = "sessão", y = "número de clicks")
+
+buscas.filtradas %>% 
+    ggplot(aes(x = num_clicks)) +
+        geom_histogram(binwidth = 1) +
+        labs(x = "número de clicks", y = "contagem")
+```
+
+Como podemos ver, a taxa geral de clicks é baixa, visto que a maior parte dos pontos está perto de zero, que pode ser reforçado pelo histograma, que mostra que a distribuição é bastante assimétrica, tendo uma longa cauda à direita. Isso também pode ser visto pela média que é 0.29 e que cerca de 76% das sessões não tem nenhum click, como podemos ver a baixo.
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas %>% 
+    pull(num_clicks) %>% 
+    summary()
+
+buscas.filtradas %>% 
+    summarise(proporcao.zero.clicks = sum(num_clicks == 0) / n())
+```
+
+
+Vejamos agora como que a taxa de clicks varia nos grupos:
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas %>% 
+    ggplot(aes(x = group, y = num_clicks)) +
+        geom_jitter(alpha = 0.1) +
+        labs(x = "grupo", y = "número de clicks")
+
+buscas.filtradas %>% 
+    ggplot(aes(x = num_clicks)) +
+        geom_histogram(binwidth = 1) +
+        facet_grid(group ~ ., scales = "free_y") +
+        labs(x = "número de clicks", y = "contagem")
+```
+
+Vemos que o grupo b tem quantidade de clicks um pouco abaixo do grupo a, visto a concentração de pontos um pouco mais próxima de zero, além do histograma ser um pouco mais concentrado em valores baixos. Isso também pode ser reforçado pelas médias, visto que a média de número de clicks do grupo a é mais que o dobro da do grupo b, como vemos abaixo.
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas %>% 
+    filter(group == "a") %>% 
+    pull(num_clicks) %>% 
+    summary()
+
+buscas.filtradas %>% 
+    filter(group == "b") %>% 
+    pull(num_clicks) %>% 
+    summary()
+```
+
+
+Com isso concluímos que independente do grupo a taxa de clicks geral é baixa, mas existe uma pequena diferença entre a taxa de clicks do grupo a e do grupo b, sendo a taxa do grupo a um pouco maior que a do b.
+
+## Respondendo a segunda pergunta
+Relembrando, a segunda pergunta a ser respondida é a seguinte:
+**Qual resultados as pessoas tendem a tentar primeiro? Como ela muda dia a dia?**
+
+Para responder esta pergunta veremos primeiramente a distribuição dos valores do índice do primeiro click, para isso, vamos filtrar as observações que não informam onde clicaram:
+
+```{r warning=FALSE, message=FALSE}
+buscas.com.click <- buscas.filtradas %>% 
+    filter(!is.na(first_click))
+
+buscas.com.click %>% 
+    ggplot(aes(x = "sessão", y = first_click)) +
+        geom_jitter(alpha = 0.3) +
+        labs(x = "sessão", y = "índice do primeiro click") +
+        scale_y_log10()
+```
+
+Vemos que a maior concentração está em índices baixos, abaixo de 10, como podemos ver no histograma a seguir:
+
+```{r warning=FALSE, message=FALSE}
+buscas.com.click %>% 
+    ggplot(aes(x = first_click)) +
+        geom_histogram(binwidth = 1) +
+        labs(x = "índice do primeiro click", y = "contagem")
+```
+
+Vemos também no histograma que a maior parte dos usuários clicam no primeiro link da busca, seguido do segundo, como mostra a distribuição bastante assimétrica, com cauda longa à direita. Esta visão pode ser reforçada, pois pelo menos 50% dos usuário clicam na primeira busca e 75% clicam na primeira ou segunda, como pode ser visto abaixo.
+
+```{r warning=FALSE, message=FALSE}
+buscas.com.click %>% 
+    pull(first_click) %>% 
+    summary()
+```
+
+Vejamos agora como que as buscas mudam dia a dia.
+
+```{r warning=FALSE, message=FALSE}
+buscas.com.click %>% 
+    mutate(dia.do.ano = paste(day(session_start_date), "/", month(session_start_date), "-", weekdays(session_start_date), sep = "")) %>% 
+    ggplot(aes(x = first_click)) +
+        geom_histogram(binwidth = 1) +
+        facet_grid(dia.do.ano ~ .) +
+        labs(x = "índice do primeiro click", y = "contagem") +
+        theme_bw()
+```
+
+As distribuições dos clicks parecem seguir a mesma distribuição, independente do dia da semana, como podemos confirmar com as médias, medianas e proporção de clicks no primeiro link, visto abaixo.
+
+```{r warning=FALSE, message=FALSE}
+buscas.com.click %>% 
+    mutate(dia.do.ano = paste(day(session_start_date), "/", month(session_start_date), "-", weekdays(session_start_date), sep = "")) %>% 
+    group_by(dia.do.ano) %>% 
+    summarise(
+        media = mean(first_click),
+        mediana = median(first_click),
+        proporcao.de.1 = sum(first_click == 1) / n()
+    ) %>% 
+    gather(medida, valor, -dia.do.ano) %>% 
+    ggplot(aes(x = dia.do.ano, y = valor, fill = medida)) +
+        geom_bar(stat = "identity") +
+        facet_grid(medida ~ ., scales = "free") +
+        theme(axis.text.x = element_text(angle = -45, hjust = 0)) +
+        labs(x = "dia do ano")
+```
+
+Como em todos os dias pelo menos 60% das pessoas clicam no primeiro link, concluímos que as pessoas tendem a clicar mais no primeiro link da busca, independente do dia.
+
+## Respondendo a terceira pergunta
+Relembrando, a terceira pergunta a ser respondida é a seguinte:
+**Qual é nossa taxa de resultados zerados diária? Como ela varia entre os grupos?**
+
+Vejamos a distribuição da quantidade dos resultados:
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas %>% 
+    ggplot(aes(x = "sessão", y = results)) +
+        geom_boxplot() +
+        labs(x = "sessão", y = "quantidade de resultados")
+
+buscas.filtradas %>% 
+    pull(results) %>% 
+    summary()
+```
+
+Vemos que a quantidade de resultados mediana é de 20, sendo 75% das observações acima de 2 resultados.
+
+Vejamos a taxa de resultados zerados diária:
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas %>% 
+    mutate(dia.do.ano = paste(day(session_start_date), "/", month(session_start_date), "-", weekdays(session_start_date), sep = "")) %>% 
+    group_by(dia.do.ano) %>% 
+    summarise(prop.de.zero = sum(results == 0) / n()) %>% 
+    ggplot(aes(x = dia.do.ano, y = prop.de.zero)) +
+        geom_bar(stat = "identity") +
+        labs(x = "dia", y = "proporção de zeros")
+```
+
+Vemos que a taxa diária de resultados zerados é sempre abaixo de 20% e acima de 17,5%, independente do dia.
+
+Vejamos se a taxa de resultados zerados diária muda de acordo com o grupo:
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas %>% 
+    group_by(group) %>% 
+    summarise(prop.de.zero = sum(results == 0) / n()) %>% 
+    ggplot(aes(x = group, y = prop.de.zero, fill = group)) +
+        geom_bar(stat = "identity")
+```
+
+Apesar de não existir quase diferença entre a proporção dos resultados zerados diários, como vemos acima, ao variarmos no dia, parece haver uma ligeira diferença entre os grupos com relação a proporção de zeros no sábado e domingo, onde a proporção é maior para o grupo b.
+
+```{r warning=FALSE, message=FALSE}
+buscas.filtradas %>% 
+    mutate(dia.do.ano = paste(day(session_start_date), "/", month(session_start_date), "-", weekdays(session_start_date), sep = "")) %>% 
+    group_by(dia.do.ano, group) %>% 
+    summarise(prop.de.zero = sum(results == 0) / n()) %>% 
+    ggplot(aes(x = dia.do.ano, y = prop.de.zero, fill=group)) +
+        geom_bar(stat = "identity", position = "dodge") +
+        labs(x = "dia", y = "proporção de zeros")
+
+```
+
+Com isso, concluímos que a taxa de resultados zerados fica em torno de 17% e 20%, e existe uma pequena diferença entre os grupos apenas no final de semana, onde grupo b tem mais resultados zerados no sábado e domingo. Apesar desta diferença ser pequena, cerca de 2%, considerando os demais dias, parece ser uma diferença relevante.
+
+## Respondendo a quarta pergunta
+Relembrando, a quarta e última pergunta a ser respondida é a seguinte:
+**Seja duração da sessão aproximadamente o tempo entre o primeiro evento e o último evento em uma sessão. Escolha uma variável dos dados e descreva seu relacionamento com a duração da sessão. Visualiza o relacionamento.**
+
+Vamos agora verificar a relação entre a duração da sessão e o número de clicks, visto que parece fazer sentido uma pessoa que passou muito tempo no sistema de busca, clicar em mais itens.
+
+Vejamos abaixo se existe relação entre as variáveis:
+
+```{r warning=FALSE, message=FALSE}
+buscas.duracao.clicks <- buscas.filtradas %>% 
+    group_by(session_id) %>% 
+    summarise(session_length = first(session_length),
+              num_clicks = sum(num_clicks)) 
+
+buscas.duracao.clicks %>% 
+    ggplot(aes(x = session_length, y = num_clicks)) +
+        geom_jitter(alpha = 0.3) +
+        scale_x_continuous(labels = comma)
+```
+
+Podemos ver que existem muitos pontos concentrados no canto esquerdo variando bastante no número de clicks, visto que é mais comum ter sessões curtas, como também existe alguns pontos quase paralelos ao eixo horizontal, formando um "L".
+
+Desta forma, concluímos que não parece existir relação significativa entre as variáveis da duração da sessão e do número de clicks, como podemos ver abaixo pela correlação de pearson:
+
+```{r warning=FALSE, message=FALSE}
+buscas.duracao.clicks %>% 
+    summarise(correlacao = cor(session_length, num_clicks, method = "pearson"))
+```
+
+___
