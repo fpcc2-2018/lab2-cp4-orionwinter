@@ -1,8 +1,6 @@
 # Link para relatório
 
-É possível baixar o relatório com o comando abaixo:
-
-`wget https://github.com/fpcc2/lab2-cp4-orionwinter/blob/master/reports/lab2-checkpoint4.html`
+É possível acessar o relatório [este link](http://rpubs.com/orionwinter/wikimedia-analysis)
 
 # Sessões, buscas e navegação na wikimedia
 

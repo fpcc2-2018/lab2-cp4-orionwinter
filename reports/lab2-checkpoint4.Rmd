@@ -56,7 +56,7 @@ Existem 9 colunas nos dados sendo elas:
 
 Agora vamos explorar os dados, olhando suas distribuições, valores extremos e faltantes:
 
-### session_id
+### Id da sessão
 
 Vejamos primeiro os sessions ids:
 
@@ -96,7 +96,7 @@ buscas.por.sessao %>%
 
 Vemos que muitas sessões tem o tempo mediano entre consultas bastante baixo, onde 50% das sessões tem mediana de duração  abaixo de 12 segundos e 75% das sessões tem mediana de duração abaixo de 27 segundos.
 
-### session_start_date
+### Data e hora da sessão
 
 Vamos explorar agora a data das buscas:
 
@@ -114,9 +114,9 @@ buscas %>%
         labs(x = "dia do ano", y = "contagem")
 ```
 
-Vemos que os dados vão do dia 01/03/2016 à 08/03/2016, onde os finais de semana tem menos observações que os demais. Como o dia 08/03 foi até as 20h, tem menos observações que os outros dias de semana.
+Vemos que os dados vão do dia 01/03/2016 à 08/03/2016 e que a quantidade de buscas diárias fica entre 13 e 19 mil, onde os finais de semana tem menos observações que os dias de semana. Como o dia 08/03 foi até as 20h, este tem menos observações que os outros dias de semana.
 
-### group
+### Grupo
 
 Vejamos agora os grupos que estão presentes nos dados.
 
@@ -129,7 +129,7 @@ buscas %>%
 
 Vemos que cerca de 70% das buscas são do grupo A, enquanto cerca de 30% são do grupo B.
 
-### results
+### Resultados
 
 Vejamos agora quantos resultados as buscas retornam:
 
@@ -140,11 +140,15 @@ buscas %>%
         labs(x = "resultados da busca", y = "contagem")
 
 buscas %>% 
-    pull(results) %>% 
-    summary()
+    summarise(minimo = min(results),
+              primeiro.quartil = quantile(results, probs = .25),
+              mediana = quantile(results, probs = .5),
+              terceiro.quartil = quantile(results, probs = .75),
+              percentil.99 = quantile(results, probs = .99)
+    )
 ```
 
-Vemos que 75% das buscas retornam até 20 resultados, porém existem alguns que retornam bem mais que este valor. 
+Vemos que 25% das buscas retornam até 2 resultados e que 99% das buscas retornam até 20 resultados, porém existem alguns que retornam bem mais que este valor. 
 Vejamos quais são estes:
 
 ```{r warning=FALSE, message=FALSE}
@@ -156,7 +160,7 @@ buscas %>%
 
 Vemos que existe uma quantidade considerável de buscas que retornaram mais que 20 resultados, tendo vários que retornaram até 500. Como a [api](https://www.mediawiki.org/wiki/API:Lists) informa que o limite de resultados é 10 por default, mas pode ser aumentado até 500, então não faremos nenhum processamento com os resultados.
 
-### num_clicks
+### Número de clicks
 
 Vejamos agora a quantidade de clicks que um usuário faz:
 
@@ -171,7 +175,7 @@ buscas %>%
     summary()
 ```
 
-Vemos que a concentração maior de clicks está próxima de zero, onde 75% das vezes não existe nenhum click, porém a distribuição tem uma cauda longa a direita, tendo um caso que o usuário clicou mais de 30 vezes nos itens da busca.
+Vemos que a concentração maior de clicks está próxima de zero, onde 75% das buscas não resulta em nenhum click, porém a distribuição tem uma cauda longa a direita, tendo um caso que o usuário clicou mais de 30 vezes nos itens da busca.
 
 Podemos ver abaixo que existem quantidades de clicks superior à quantidade de resultados, inclusive quando a quantidade de resultados é zero. Como um usuário pode clicar em uma página, depois em outra e em seguida voltar à primeira, removeremos apenas as observações que o número de clicks for superior a quantidade de resultados e o número de resultados for zero, visto que um usuário não pode clicar em um link se a busca não retornou nada.
 
@@ -186,7 +190,7 @@ buscas.filtradas <- buscas %>%
 ```
 
 
-### first_click
+### Índice do primeiro click
 
 Vejamos agora a distribuição da posição do item que o usuário clicou no mecanismo de busca:
 
@@ -198,16 +202,17 @@ buscas %>%
             labs(x = "índice do primeiro click", y = "contagem")
 ```
 
-Vemos que a maior parte dos indices tem valor baixo, mas existem alguns com valor acima de 4000, o que é uma anomalia, pois vimos anteriormente que as buscas só retornam até cerca de 500 resultados.
+Vemos que a maior parte dos indices tem valor baixo, mas existem alguns com valor acima de 4000. Pesquisando um pouco sobre o mecanismo de busca, verificamos que o índice do primeiro click pode ser maior que a quantidade de resultados, pois o resultado pode ser apenas uma página do total de resultados que uma busca fornece.
 
-Visto isso, vamos remover as buscas que tiverem o índice do primeiro click acima do total de resultados.
+Podemos verificar isso no exemplo abaixo, onde o usuário fez uma busca que tinha um total de 32 resultados, mas o limite por página era 20, logo a primeira página da busca tinha 20 itens e a segunda 12. Na primeira página ele não clicou em nenhum item, mas na segunda página ele clicou no 12º item, que era o 32º item da pesquisa.
 
 ```{r warning=FALSE, message=FALSE}
-buscas.filtradas <- buscas.filtradas %>% 
-    filter(is.na(first_click) | first_click <= results)
+buscas.filtradas %>% 
+    filter(session_id == "0d050fd8343f9ab7") %>% 
+    select(session_id, session_start_date, results, num_clicks, first_click)
 ```
 
-### session_length
+### Duração da sessão
 
 Por último, veremos quanto tempo demora as sessões, vendo sua distribuição:
 
@@ -220,11 +225,12 @@ buscas.filtradas %>%
 
 Vemos que grande parte das sessões tem duração baixa, visto a grande concentração de pontos abaixo. 
 
-Como a sessão não tem nenhuma restrição, não faremos nenhum filtro com a mesma.
+Como a sessão não tem nenhuma restrição de duração, não faremos nenhum filtro com a mesma.
 
 ## Respondendo a primeira pergunta
 
 Relembrando, a primeira pergunta a ser respondida é a seguinte:
+
 **Qual é nossa taxa de click geral diária? Como ela varia entre os grupos?**
 
 Como alguns dados foram filtrados, vejamos novamente a distribuição da quantidade de clicks:
@@ -241,7 +247,7 @@ buscas.filtradas %>%
         labs(x = "número de clicks", y = "contagem")
 ```
 
-Como podemos ver, a taxa geral de clicks é baixa, visto que a maior parte dos pontos está perto de zero, que pode ser reforçado pelo histograma, que mostra que a distribuição é bastante assimétrica, tendo uma longa cauda à direita. Isso também pode ser visto pela média que é 0.29 e que cerca de 76% das sessões não tem nenhum click, como podemos ver a baixo.
+Como podemos ver, a taxa geral de clicks é baixa, visto que a maior parte dos pontos está perto de zero, que pode ser reforçado pelo histograma, que mostra que a distribuição é bastante assimétrica, tendo uma longa cauda à direita. Isso também pode ser visto pela média que é 0.29 e que cerca de 76% das buscas não tem nenhum click, como podemos ver a baixo.
 
 ```{r warning=FALSE, message=FALSE}
 buscas.filtradas %>% 
@@ -286,10 +292,12 @@ buscas.filtradas %>%
 Com isso concluímos que independente do grupo a taxa de clicks geral é baixa, mas existe uma pequena diferença entre a taxa de clicks do grupo a e do grupo b, sendo a taxa do grupo a um pouco maior que a do b.
 
 ## Respondendo a segunda pergunta
+
 Relembrando, a segunda pergunta a ser respondida é a seguinte:
+
 **Qual resultados as pessoas tendem a tentar primeiro? Como ela muda dia a dia?**
 
-Para responder esta pergunta veremos primeiramente a distribuição dos valores do índice do primeiro click, para isso, vamos filtrar as observações que não informam onde clicaram:
+Para responder esta pergunta veremos primeiramente a distribuição dos valores do índice do primeiro click, para isso, vamos filtrar as buscas que os usuário não clicaram:
 
 ```{r warning=FALSE, message=FALSE}
 buscas.com.click <- buscas.filtradas %>% 
@@ -302,12 +310,13 @@ buscas.com.click %>%
         scale_y_log10()
 ```
 
-Vemos que a maior concentração está em índices baixos, abaixo de 10, como podemos ver no histograma a seguir:
+Vemos que a maior concentração está em índices baixos, abaixo de 10, como podemos confirmar no histograma a seguir:
 
 ```{r warning=FALSE, message=FALSE}
 buscas.com.click %>% 
     ggplot(aes(x = first_click)) +
         geom_histogram(binwidth = 1) +
+        scale_x_log10(breaks = c(1, 10, 100, 1000, 10000)) +
         labs(x = "índice do primeiro click", y = "contagem")
 ```
 
@@ -326,12 +335,13 @@ buscas.com.click %>%
     mutate(dia.do.ano = paste(day(session_start_date), "/", month(session_start_date), "-", weekdays(session_start_date), sep = "")) %>% 
     ggplot(aes(x = first_click)) +
         geom_histogram(binwidth = 1) +
-        facet_grid(dia.do.ano ~ .) +
+        scale_x_log10(breaks = c(1, 10, 100, 1000, 10000)) +
+        facet_wrap(~dia.do.ano, scales = "free_y") +
         labs(x = "índice do primeiro click", y = "contagem") +
         theme_bw()
 ```
 
-As distribuições dos clicks parecem seguir a mesma distribuição, independente do dia da semana, como podemos confirmar com as médias, medianas e proporção de clicks no primeiro link, visto abaixo.
+As distribuições dos clicks parecem seguir a mesma distribuição, independente do dia da semana, como podemos confirmar com as medianas e proporção de clicks no primeiro link, visto abaixo. Apesar das médias terem valores diferentes para os dias, esta não é uma medida robusta e é bastante afetada por valores extremos.
 
 ```{r warning=FALSE, message=FALSE}
 buscas.com.click %>% 
@@ -353,7 +363,9 @@ buscas.com.click %>%
 Como em todos os dias pelo menos 60% das pessoas clicam no primeiro link, concluímos que as pessoas tendem a clicar mais no primeiro link da busca, independente do dia.
 
 ## Respondendo a terceira pergunta
+
 Relembrando, a terceira pergunta a ser respondida é a seguinte:
+
 **Qual é nossa taxa de resultados zerados diária? Como ela varia entre os grupos?**
 
 Vejamos a distribuição da quantidade dos resultados:
@@ -408,10 +420,12 @@ buscas.filtradas %>%
 
 ```
 
-Com isso, concluímos que a taxa de resultados zerados fica em torno de 17% e 20%, e existe uma pequena diferença entre os grupos apenas no final de semana, onde grupo b tem mais resultados zerados no sábado e domingo. Apesar desta diferença ser pequena, cerca de 2%, considerando os demais dias, parece ser uma diferença relevante.
+Com isso, concluímos que a taxa de resultados zerados fica em torno de 16% e 20%, e existe uma pequena diferença entre os grupos apenas no final de semana, onde grupo b tem mais resultados zerados no sábado e domingo. Apesar desta diferença ser pequena, cerca de 2%, considerando os demais dias, parece ser uma diferença relevante.
 
 ## Respondendo a quarta pergunta
+
 Relembrando, a quarta e última pergunta a ser respondida é a seguinte:
+
 **Seja duração da sessão aproximadamente o tempo entre o primeiro evento e o último evento em uma sessão. Escolha uma variável dos dados e descreva seu relacionamento com a duração da sessão. Visualiza o relacionamento.**
 
 Vamos agora verificar a relação entre a duração da sessão e o número de clicks, visto que parece fazer sentido uma pessoa que passou muito tempo no sistema de busca, clicar em mais itens.
@@ -430,9 +444,9 @@ buscas.duracao.clicks %>%
         scale_x_continuous(labels = comma)
 ```
 
-Podemos ver que existem muitos pontos concentrados no canto esquerdo variando bastante no número de clicks, visto que é mais comum ter sessões curtas, como também existe alguns pontos quase paralelos ao eixo horizontal, formando um "L".
+Podemos ver que existem muitos pontos concentrados no canto esquerdo variando bastante no número de clicks, pois que é mais comum ter sessões curtas, além disso, existem alguns pontos quase paralelos ao eixo horizontal, formando um "L".
 
-Desta forma, concluímos que não parece existir relação significativa entre as variáveis da duração da sessão e do número de clicks, como podemos ver abaixo pela correlação de pearson:
+Desta forma, concluímos que não parece existir relação significativa entre as variáveis da duração da sessão e do número de clicks, como podemos confirmar abaixo pela correlação de pearson:
 
 ```{r warning=FALSE, message=FALSE}
 buscas.duracao.clicks %>% 
