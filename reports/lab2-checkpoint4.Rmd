@@ -233,63 +233,44 @@ Relembrando, a primeira pergunta a ser respondida é a seguinte:
 
 **Qual é nossa taxa de click geral diária? Como ela varia entre os grupos?**
 
-Como alguns dados foram filtrados, vejamos novamente a distribuição da quantidade de clicks:
+Consideraremos que a taxa de click geral diária é a proporção das sessões em que o usuário clicou em pelo menos um item mostrado.
+
+Vejamos como é esta taxa:
 
 ```{r warning=FALSE, message=FALSE}
-buscas.filtradas %>% 
-    ggplot(aes(x = "sessão", y = num_clicks)) +
-        geom_jitter(alpha = 0.05) +
-        labs(x = "sessão", y = "número de clicks")
+clicks <- buscas.filtradas %>% 
+    group_by(session_id) %>% 
+    summarise(
+        start_date = first(session_start_date),
+        dia.do.ano = paste(day(start_date), "/", month(start_date), "-", weekdays(start_date), sep = ""),
+        teve_click = sum(num_clicks, na.rm = TRUE) > 0,
+        group = first(group)
+    ) 
 
-buscas.filtradas %>% 
-    ggplot(aes(x = num_clicks)) +
-        geom_histogram(binwidth = 1) +
-        labs(x = "número de clicks", y = "contagem")
+clicks %>% 
+    group_by(dia.do.ano) %>% 
+    summarise(clickthrough_rate = sum(teve_click) / n()) %>% 
+    ggplot(aes(x = dia.do.ano, y = clickthrough_rate)) +
+        geom_bar(stat = "identity") +
+        labs(x = "dia do ano", y = "taxa de clicks")
 ```
 
-Como podemos ver, a taxa geral de clicks é baixa, visto que a maior parte dos pontos está perto de zero, que pode ser reforçado pelo histograma, que mostra que a distribuição é bastante assimétrica, tendo uma longa cauda à direita. Isso também pode ser visto pela média que é 0.29 e que cerca de 76% das buscas não tem nenhum click, como podemos ver a baixo.
+Como podemos ver, a taxa geral de clicks diária é razoavelmente baixa, visto que varia entre 38% e 40%, independente do dia. Ou seja, a maioria das sessões de busca, não resulta em nenhum click.
+
+Vejamos como esta taxa geral de clicks diária varia entre os grupos:
 
 ```{r warning=FALSE, message=FALSE}
-buscas.filtradas %>% 
-    pull(num_clicks) %>% 
-    summary()
-
-buscas.filtradas %>% 
-    summarise(proporcao.zero.clicks = sum(num_clicks == 0) / n())
+clicks %>% 
+    group_by(group, dia.do.ano) %>% 
+    summarise(clickthrough_rate = sum(teve_click) / n()) %>% 
+    ggplot(aes(x = dia.do.ano, y = clickthrough_rate, fill = group)) +
+        geom_bar(stat = "identity", position = position_dodge()) +
+        labs(x = "dia do ano", y = "taxa de clicks")
 ```
 
+Vemos que existe uma diferença considerável entre os grupos, visto que a taxa geral de clicks diária do grupo a é cerca do triplo da taxa do grupo b, independente do dia.
 
-Vejamos agora como que a taxa de clicks varia nos grupos:
-
-```{r warning=FALSE, message=FALSE}
-buscas.filtradas %>% 
-    ggplot(aes(x = group, y = num_clicks)) +
-        geom_jitter(alpha = 0.1) +
-        labs(x = "grupo", y = "número de clicks")
-
-buscas.filtradas %>% 
-    ggplot(aes(x = num_clicks)) +
-        geom_histogram(binwidth = 1) +
-        facet_grid(group ~ ., scales = "free_y") +
-        labs(x = "número de clicks", y = "contagem")
-```
-
-Vemos que o grupo b tem quantidade de clicks um pouco abaixo do grupo a, visto a concentração de pontos um pouco mais próxima de zero, além do histograma ser um pouco mais concentrado em valores baixos. Isso também pode ser reforçado pelas médias, visto que a média de número de clicks do grupo a é mais que o dobro da do grupo b, como vemos abaixo.
-
-```{r warning=FALSE, message=FALSE}
-buscas.filtradas %>% 
-    filter(group == "a") %>% 
-    pull(num_clicks) %>% 
-    summary()
-
-buscas.filtradas %>% 
-    filter(group == "b") %>% 
-    pull(num_clicks) %>% 
-    summary()
-```
-
-
-Com isso concluímos que independente do grupo a taxa de clicks geral é baixa, mas existe uma pequena diferença entre a taxa de clicks do grupo a e do grupo b, sendo a taxa do grupo a um pouco maior que a do b.
+Com isso concluímos que a taxa de click geral diária fica entre 38% e 40%, mas quando variamos entre os grupos, percebemos que a taxa do grupo a fica entre cerca de 64% e 68%, enquanto a taxa do grupo b fica entre 13% e 20%. Logo existe uma diferença considerável entre o grupo a e o grupo b, visto que o grupo a tem a taxa de click geral diária mais de três vezes maior, independente do dia.
 
 ## Respondendo a segunda pergunta
 
