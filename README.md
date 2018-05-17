@@ -1,6 +1,7 @@
 # Link para relatório
 
-É possível acessar o relatório [este link](http://rpubs.com/orionwinter/wikimedia-analysis)
+É possível acessar o relatório [neste link](http://rpubs.com/orionwinter/wikimedia-analysis).
+Para ver o relatório utilizando inferências acesse [este link](http://rpubs.com/orionwinter/wikimedia-inference).
 
 # Sessões, buscas e navegação na wikimedia
 

@@ -273,10 +273,11 @@ ics.dia.a.dia <- boot.dia.a.dia %>%
 
 ics.dia.a.dia %>% 
   ggplot(aes(x = dia.do.ano, ymin = lower, ymax = upper)) + 
-  geom_errorbar(width = .2)
+    geom_errorbar(width = .2) +
+    labs(x = "dia do ano", y = "proporção de click geral diária")
 ```
 
-Como podemos ver, a taxa geral de clicks diária é razoavelmente baixa, visto que pode variar entre 37% e 41%, além de não existir diferença significativa, com 95% de confiança, da proporção de pesquisas que geraram click entre os dias. Ou seja, a maioria das sessões de busca, não resulta em nenhum click.
+Como podemos ver, a taxa geral de clicks diária é razoavelmente baixa, visto que pode variar entre 37% e 41%, além de não existir diferença significativa, com 95% de confiança, da proporção de pesquisas que geraram click entre os dias. Ou seja, a maioria das sessões de busca, não resulta em nenhum click, visto que em nenhum dia a proporção de pesquisas que tiveram click superou 50%.
 
 Vejamos como esta taxa geral de clicks diária varia entre os grupos:
 
@@ -299,12 +300,50 @@ ics.dia.a.dia.grupo <- boot.dia.a.dia.grupo %>%
 
 ics.dia.a.dia.grupo %>% 
   ggplot(aes(x = dia.do.ano, ymin = lower, ymax = upper, color = group)) + 
-  geom_errorbar(width = .2)
+    geom_errorbar(width = .2) +
+    labs(x = "dia do ano", y = "proporção de click geral diária", color = "grupo")
 ```
 
-Vemos que existe uma diferença estatisticamente relevante, com 95% de confiança, da taxa geral de clicks diária entre os grupos, visto que o intervalo de confiança do grupo A é sempre axima do grupo B, independente do dia.
+Vemos que existe uma diferença estatisticamente relevante, com 95% de confiança, da taxa geral de clicks diária entre os grupos, visto que o intervalo de confiança do grupo A é sempre acima do grupo B, independente do dia.
 
-Com isso concluímos que a taxa de click geral diária pode ficar entre 37% e 41%, mas quando variamos entre os grupos, percebemos que a taxa do grupo A fica entre cerca de 63% e 69%, enquanto a taxa do grupo B pode ficar entre 12% e 21%. Logo existe uma diferença significativa entre o grupo A e o grupo B, com 95% de confiança. Além do mais, o grupo A tem a taxa de click geral diária mais de três vezes maior que o grupo B, independente do dia.
+Com isso concluímos que a taxa de click geral diária fica entre 37% e 41%, mas quando variamos entre os grupos, percebemos que a taxa do grupo A fica entre cerca de 63% e 69%, enquanto a taxa do grupo B fica entre 12% e 21%, com 95% de confiança. Logo existe uma diferença significativa entre o grupo A e o grupo B, com 95% de confiança. Além do mais, o grupo A tem a taxa de click geral diária mais de três vezes maior que o grupo B, independente do dia.
+
+### Verificando o método utilizado
+
+Para testarmos o método utilizado acima, verificaremos se existe uma diferença entre a taxa de clicks geral diária da metade das sessões do grupo A, com a outra metade do grupo A, separadas aleatóriamente. Deste modo, como estaremos comparando observações do mesmo grupo, é esperado que não exista diferença significativa.
+
+```{r warning=FALSE, message=FALSE}
+clicks.group.a <- clicks %>% 
+    filter(group == "a")
+
+a1.group.indexes <- sample(1:nrow(clicks.group.a), size = floor(nrow(clicks.group.a) / 2))
+
+clicks.group.a <- clicks.group.a %>% 
+    mutate(new.group = ifelse(row_number() %in% a1.group.indexes, "a1", "a2"))
+
+boot.dia.a.dia.grupo.a <- clicks.group.a %>%
+    filter(!is.na(teve_click)) %>%
+    group_by(dia.do.ano, new.group) %>%
+    summarise(
+        boot = list(boot(teve_click, prop.maior.zero, R = 2000))
+    ) 
+
+ics.dia.a.dia.grupo.a <- boot.dia.a.dia.grupo.a %>% 
+    group_by(dia.do.ano, new.group) %>% 
+    mutate(
+        ci = list(boot.ci(boot.out = boot[[1]], conf = 0.95, type = "basic")),
+        lower = ci[[1]][[4]][4],
+        upper = ci[[1]][[4]][5]
+    ) %>% 
+    select(-ci)
+
+ics.dia.a.dia.grupo.a %>% 
+  ggplot(aes(x = dia.do.ano, ymin = lower, ymax = upper, color = new.group)) + 
+    geom_errorbar(width = .2) +
+    labs(x = "dia do ano", y = "proporção de click geral diária", color = "grupo")
+```
+
+Como esperado concluímos que não existe diferença significativa entre as taxas de click geral diária entre observações do mesmo grupo, com 95% de confiança, visto a sobreposição dos intervalos de confiança em todos os dias.
 
 ## Respondendo a segunda pergunta
 
@@ -323,10 +362,9 @@ buscas.com.click %>%
         geom_jitter(alpha = 0.3) +
         labs(x = "sessão", y = "índice do primeiro click") +
         scale_y_log10()
-
 ```
 
-Vamos agora tentar inferir quais resultados as pessoas tendem a clicar primeiro baseado na amostra dos dados, aplicando bootstrap na amostra e medindo a média do índice do primeiro click, com 95% de confiança:
+Vamos agora inferir quais resultados as pessoas tendem a clicar primeiro baseado na amostra dos dados, aplicando bootstrap na amostra e medindo a média do índice do primeiro click, com 95% de confiança:
 
 ```{r warning=FALSE, message=FALSE}
 media.amostra <- function(value, i) {
@@ -347,7 +385,7 @@ click.ci.df %>%
     labs(x = "intervalo de confiança", y = "posição média do click na página")
 ```
 
-Podemos verificar que com 95% de confiança, a média do índice da posição média do primeiro click na página está entre 3.28 e 4.42, ou seja, a posição média fica entre o elemento 3 e o 5 da página.
+Podemos verificar que com 95% de confiança, a posição média do índice do primeiro click na página está entre 3.28 e 4.42.
 
 Vejamos se a posição média do primeiro click na página varia entre os dias:
 
@@ -374,10 +412,88 @@ ics.dia.a.dia <- boot.dia.a.dia %>%
 
 ics.dia.a.dia %>% 
   ggplot(aes(x = dia.do.ano, ymin = lower, ymax = upper)) + 
-  geom_errorbar(width = .2)
+    geom_errorbar(width = .2) +
+    labs(x = "dia do ano", y = "posição média do click na página")
 ```
 
 Como podemos ver acima, não existe nenhum dia em que a posição do primeiro click se destacou significativamente, com 95% de confiança, de todos os demais. Porém, podemos verificar que o dia 04/03 teve posição média do primeiro click superior aos demais itens, com exclusão do dia 01/03. Além disso, podemos observar que o dia 05/03 teve posição do primeiro click menor que o dia 03/03 e que o dia 08/03, com 95% de confiança, porém não foi uma diferença tão absurda.
 
-Com isso, concluímos que no geral, a posição média do click se encontra entre o terceiro e o quinto elemento da página, com 95% de confiança. Ao analisar dia a dia, excluindo o dia 01/03 e 04/03, a posição média não varia tanto, visto que a posição média para o primeiro click se encontra até o quarto elemento da página, com 95% de confiança. Vale ressaltar que utilizamos a média para verificar a tendência central, medida esta que é sensível à outliers.
+Com isso, concluímos que no geral, a posição média do índice do primeiro click se encontra entre 3.28 e 4.42, com 95% de confiança. Ao analisar dia a dia, excluindo o dia 01/03 e 04/03, a posição média é baixa, visto que a posição média para o primeiro click se encontra até o quarto elemento da página, com 95% de confiança. Vale ressaltar que utilizamos a média para verificar a tendência central, medida esta que é sensível à outliers.
 
+## Respondendo a terceira pergunta
+
+Relembrando, a terceira pergunta a ser respondida é a seguinte:
+
+**Qual é nossa taxa de resultados zerados diária? Como ela varia entre os grupos?**
+
+Para isso, veremos a taxa de resultados zerados diariamente, utilizando intervalos de confiança para inferir sobre a taxa da população a partir da amostra.
+
+```{r warning=FALSE, message=FALSE}
+prop.zero <- function(value, i) {
+    return(sum(value[i] == 0) / length(value[i]))
+}
+
+boot.dia.a.dia <- buscas.filtradas %>%
+    filter(!is.na(results)) %>% 
+    rowwise() %>% 
+    mutate(
+        start_date = first(session_start_date),
+        dia.do.ano = paste(day(start_date), "/", month(start_date), "-", weekdays(start_date), sep = "")
+    ) %>% 
+    group_by(dia.do.ano) %>%
+    summarise(
+        boot = list(boot(results, prop.zero, R = 5000))
+    )
+
+ics.dia.a.dia <- boot.dia.a.dia %>% 
+    group_by(dia.do.ano) %>% 
+    mutate(
+        ci = list(boot.ci(boot.out = boot[[1]], conf = 0.95, type = "basic")),
+        lower = ci[[1]][[4]][4],
+        upper = ci[[1]][[4]][5]
+    ) %>% 
+    select(-ci)
+
+ics.dia.a.dia %>% 
+  ggplot(aes(x = dia.do.ano, ymin = lower, ymax = upper)) + 
+    geom_errorbar(width = .2) +
+    labs(x = "dia do ano", y = "proporção de resultados zerados diários")
+```
+
+Como podemos ver, a proporção de resultados zerados diário fica entre 0.17 e 0.20, com 95% de confiança, e não existe um dia da semana que tem uma taxa de resultado zerado diário maior que todos os demais. Contudo, podemos observar que o dia 08/03 possui uma taxa maior que o dia 03, 04, 06 e 07, com 95% de confiança, apesar de não ser uma diferença muito grande.
+
+Vejamos se essa taxa de resultados zerados muda de acordo com o grupo:
+
+```{r warning=FALSE, message=FALSE}
+boot.dia.a.dia <- buscas.filtradas %>%
+    filter(!is.na(results)) %>% 
+    rowwise() %>% 
+    mutate(
+        start_date = first(session_start_date),
+        dia.do.ano = paste(day(start_date), "/", month(start_date), "-", weekdays(start_date), sep = "")
+    ) %>% 
+    group_by(dia.do.ano, group) %>%
+    summarise(
+        boot = list(boot(results, prop.zero, R = 5000))
+    )
+
+ics.dia.a.dia <- boot.dia.a.dia %>% 
+    group_by(dia.do.ano, group) %>% 
+    mutate(
+        ci = list(boot.ci(boot.out = boot[[1]], conf = 0.95, type = "basic")),
+        lower = ci[[1]][[4]][4],
+        upper = ci[[1]][[4]][5]
+    ) %>% 
+    select(-ci)
+
+ics.dia.a.dia %>% 
+  ggplot(aes(x = dia.do.ano, ymin = lower, ymax = upper, color = group)) + 
+    geom_errorbar(width = .2) +
+    labs(x = "dia do ano", y = "proporção de resultados zerados diários", color = "grupo")
+```
+
+Como podemos ver, com exclusão do dia 06/03, em todos os dias não existe diferença entre a proporção de resultados zerados diários.
+
+Com isso, concluímos que a taxa de resultados zerados fica entre 16% e 21%, com 95% de confiança, e não existe diferença significativa entre os grupos, com excessão do dia 06/03, onde grupo b tem mais resultados zerados.
+
+___
