@@ -1,0 +1,89 @@
+---
+title: "Teste de hipótese dos dados da Wikimedia Foundation"
+output: html_document
+---
+
+## Introdução
+
+A [Wikimedia Foundation](https://wikimediafoundation.org/wiki/Home) é uma organização sem fins lucrativos que encoraja o crescimento, desenvolvimento e distribuição de conteúdo de educação grátis e em múltiplas linguagens através de projetos baseados em [wiki](https://en.wikipedia.org/wiki/Wiki). 
+
+Em 2016 o [Wikimedia Discovery](https://www.mediawiki.org/wiki/Wikimedia_Discovery), um departamento da Wikimidia Foundation, abriu uma seleção de empregos para o cargo de analista de dados. Neste relatório responderemos duas das perguntas propostas por eles, descrita [nesta proposta de emprego](https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016):
+
+1. Como nossa taxa de click geral diária varia entre os grupos?
+2. Como nossa taxa de resultados zerados diária varia entre os grupos?
+
+Para responder essas perguntas, utilizaremos os  [dados](https://github.com/wikimedia-research/Discovery-Hiring-Analyst-2016/raw/master/events_log.csv.gz) fornecidos por eles e modificados pelo professor Nazareno Andrade utilizando um [script R](https://github.com/fpcc2/lab2-cp4-orionwinter/blob/master/code/import-events_to_searches.R). 
+
+Como os dados providos pela Wikimedia são apenas uma amostra, utilizaremos teste de hipótese com permutação para inferir sobre a amostra. Como os dados são de interações entre usuário e máquina, os quais são sujeitos a variabilidade humana, utilizaremos o nível de confiança de 95%.
+
+## Descrevendo os dados / Análise exploratória
+
+```{r warning=FALSE, message=FALSE}
+set.seed(123)
+library(tidyverse)
+library(lubridate)
+library(resample)
+```
+
+Como a descrição dos dados e análise exploratória foi feita anteriormente, deixaremos disponível o outro relatório [neste link](http://rpubs.com/orionwinter/wikimedia-inference), a qual possui a descrição dos dados e análise exploratória.
+
+```{r warning=FALSE, message=FALSE}
+buscas <- read_csv(here::here("data/search_data.csv"))
+
+buscas.filtradas <- buscas %>% 
+    filter(!(num_clicks > results & results == 0))
+```
+
+## Respondendo a primeira pergunta
+
+Consideraremos que a taxa de click geral diária é a proporção das sessões em que o usuário clicou em pelo menos um item mostrado.
+
+Para responder a pergunta, verificaremos se existe diferença entre a taxa de click geral diária entre o grupo A e o grupo B. Para comparar suas taxas, faremos um teste de permutação, onde estaremos medindo a proporção diária de clicks em cada grupo. 
+
+Vejamos as hipóteses a serem testadas:
+
+* H0: Não existe diferença entre a taxa de click geral diária dos grupo A e B.
+* H1: Existe diferença entre a taxa de click geral diária dos grupo A e B.
+
+```{r warning=FALSE, message=FALSE}
+clicks <- buscas.filtradas %>% 
+    group_by(session_id) %>% 
+    summarise(
+        teve_click = sum(num_clicks, na.rm = TRUE) > 0,
+        group = first(group)
+    ) %>% 
+    ungroup()
+
+prop.maior.zero <- function(value, i) {
+    return(sum(value[i]) / length(value[i]))
+}
+
+permutationTest2(clicks, prop.maior.zero(teve_click), treatment = group)
+```
+
+Como o p-valor encontrado é 2e-04 (< 0.05), descartamos a hipótese nula. Com isso podemos afirmar, com 95% de confiança, que existe diferença significativa entre a taxa de click geral diária dos grupo A e B, onde a taxa do grupo A é maior que a do grupo B.
+
+## Respondendo a segunda pergunta
+
+Consideraremos que a taxa de resultados zerados diária é a proporção das buscas em que a quantidade de resultados é zero.
+
+Para responder a pergunta, verificaremos se existe diferença entre a taxa de resultados zerados diária dos grupos A e B. Para comparar suas taxas, faremos um teste de permutação, onde estaremos medindo a proporção diária de resultados zerados em cada grupo
+
+Vejamos as hipóteses a serem testadas:
+
+* H0: Não existe diferença entre a taxa de resultados zerados diária dos grupo A e B.
+* H1: Existe diferença entre a taxa de resultados zerados diária dos grupo A e B.
+
+```{r warning=FALSE, message=FALSE}
+prop.zerada <- function(value, i) {
+    return(sum(value[i] == 0) / length(value[i]))
+}
+
+permutationTest2(buscas.filtradas, prop.zerada(results), treatment = group)
+```
+
+Como o p-valor encontrado é 0.121 (>= 0.05), não descartamos a hipótese nula. Com isso podemos afirmar, com 95% de confiança, não existe diferença significativa entre a taxa de resultados zerados diária dos grupo A e B.
+
+Em comparação com intervalos de confiança, os testes de hipóteses aplicados para responder as perguntas propostas neste relatório apresentam menos informação, visto que o resultado final é baseado em apenas um valor, o p-valor, comparado com outro, o nível de significância. Caso utilizássemos intervalos de confiança, teríamos adicionalmente a informação de quanto um grupo é maior que outro. A vantagem de utilizar testes de hipótese é pela aceitação na comunidade científica, porém os dois podem ser utilizados em conjunto.
+
+___
